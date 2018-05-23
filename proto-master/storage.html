@@ -1,0 +1,498 @@
+<!doctype>
+<html>
+
+<head>
+    <title>IPFS + Ethereum Storage Application</title>
+    <link rel="stylesheet" type="text/css" href="./storage/style.css" />
+    <script type="text/javascript" src="./ipfs/ipfs.js"></script>
+    <script type="text/javascript" src="./web3/web3.min.js"></script>
+    <!--<script src="https://unpkg.com/ipfs-api/dist/index.js"></script>-->
+    <script src="https://unpkg.com/ipfs/dist/index.min.js"></script>
+    <!--Symmetric encryption AES-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/aes.js"></script>
+    <script type="text/javascript">
+
+    /* Configuration variables */
+    //var ipfs = require('ipfs-api');
+    var ipfsHost    = 'localhost';
+    var ipfsAPIPort = '5001';
+    //var ipfs = ipfsAPI('/ip4/127.0.0.1/tcp/5001');
+    var ipfsWebPort = '8080';
+    var web3Host    = 'http://localhost';
+    var web3Port    = '8545';
+
+    /* IPFS initialization */
+    var ipfs = window.IpfsApi(ipfsHost, ipfsAPIPort)
+    ipfs.swarm.peers(function (err, res) {
+        if (err) {
+            console.error(err);
+        } else {
+            var numPeers = res.Peers === null ? 0 : res.Peers.length;
+            console.log("IPFS - connected to " + numPeers + " peers");
+        }
+    });
+
+    /* web3 initialization */
+    var Web3 = require('web3');
+    var web3 = new Web3();
+    web3.setProvider(new web3.providers.HttpProvider(web3Host + ':' + web3Port));
+    if (!web3.isConnected()) {
+        console.error("Ethereum - no connection to RPC server");
+    } else {
+        console.log("Ethereum - connected to RPC server");
+    }
+
+
+    //const path = require('path')
+
+
+    /* JavaScript smart contract interface */
+    var contractInterface = [{
+      "constant": false,
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "revokeRead",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "grantRead",
+      "outputs": [
+        {
+          "name": "x",
+          "type": "address"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "isOwner",
+      "outputs": [
+        {
+          "name": "x",
+          "type": "address"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "grantOwnership",
+      "outputs": [
+        {
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "name": "x",
+          "type": "string"
+        }
+      ],
+      "name": "_owner",
+      "outputs": [
+        {
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "name": "x",
+          "type": "string"
+        }
+      ],
+      "name": "sethash",
+      "outputs": [
+        {
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "_creator",
+      "outputs": [
+        {
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function",
+      "constant": false,
+      "name": "hasRead",
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "inputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function",
+      "constant": false,
+      "name": "getHash",
+      "outputs": [
+        {
+          "name": "x",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "inputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    }
+  ];
+
+    var account = web3.eth.accounts[0];
+
+    var contractObject = {
+        from: account,
+        gas: 3000000,
+        data: '0x6060604052341561000f57600080fd5b336000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555033600160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055506060604051908101604052806001151581526020016001151581526020016001151581525060036000600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060008201518160000160006101000a81548160ff02191690831515021790555060208201518160000160016101000a81548160ff02191690831515021790555060408201518160000160026101000a81548160ff021916908315150217905550905050610958806101886000396000f300606060405260043610610099576000357c0100000000000000000000000000000000000000000000000000000000900463ffffffff168063607360d31461009e57806370b8cdd5146100d75780638f32d59b14610110578063acfd82f214610165578063b2bdfa7b1461019e578063b63d194f146101f3578063bc8bde6414610250578063c30fc492146102a5578063d13319c4146102f6575b600080fd5b34156100a957600080fd5b6100d5600480803573ffffffffffffffffffffffffffffffffffffffff16906020019091905050610384565b005b34156100e257600080fd5b61010e600480803573ffffffffffffffffffffffffffffffffffffffff169060200190919050506104aa565b005b341561011b57600080fd5b6101236105d0565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b341561017057600080fd5b61019c600480803573ffffffffffffffffffffffffffffffffffffffff169060200190919050506105fa565b005b34156101a957600080fd5b6101b161069a565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b34156101fe57600080fd5b61024e600480803590602001908201803590602001908080601f016020809104026020016040519081016040528093929190818152602001838380828437820191505050505050919050506106c0565b005b341561025b57600080fd5b6102636106da565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b34156102b057600080fd5b6102dc600480803573ffffffffffffffffffffffffffffffffffffffff169060200190919050506106ff565b604051808215151515815260200191505060405180910390f35b341561030157600080fd5b610309610769565b6040518080602001828103825283818151815260200191508051906020019080838360005b8381101561034957808201518184015260208101905061032e565b50505050905090810190601f1680156103765780820380516001836020036101000a031916815260200191505b509250505060405180910390f35b600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff161415156103e057600080fd5b60606040519081016040528060011515815260200160001515815260200160001515815250600360008373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060008201518160000160006101000a81548160ff02191690831515021790555060208201518160000160016101000a81548160ff02191690831515021790555060408201518160000160026101000a81548160ff02191690831515021790555090505050565b600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614151561050657600080fd5b60606040519081016040528060011515815260200160011515815260200160001515815250600360008373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060008201518160000160006101000a81548160ff02191690831515021790555060208201518160000160016101000a81548160ff02191690831515021790555060408201518160000160026101000a81548160ff02191690831515021790555090505050565b6000600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff16905090565b600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614151561065657600080fd5b80600160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555050565b600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b80600290805190602001906106d6929190610873565b5050565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b6000600360008373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060000160019054906101000a900460ff161561075f5760019050610764565b600090505b919050565b6107716108f3565b60011515600360003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060000160019054906101000a900460ff1615151415156107d357600080fd5b60028054600181600116156101000203166002900480601f0160208091040260200160405190810160405280929190818152602001828054600181600116156101000203166002900480156108695780601f1061083e57610100808354040283529160200191610869565b820191906000526020600020905b81548152906001019060200180831161084c57829003601f168201915b5050505050905090565b828054600181600116156101000203166002900490600052602060002090601f016020900481019282601f106108b457805160ff19168380011785556108e2565b828001600101855582156108e2579182015b828111156108e15782518255916020019190600101906108c6565b5b5090506108ef9190610907565b5090565b602060405190810160405280600081525090565b61092991905b8082111561092557600081600090555060010161090d565b5090565b9056'
+    };
+
+    var sendDataObject = {
+        from: account,
+        gas: 3000000,
+    };
+
+    var addr = web3.eth.accounts;
+
+    var contractOwner;
+
+    window.addr = addr;
+    window.contractOwner = contractOwner;
+    window.ipfs = ipfs;
+    window.web3 = web3;
+    window.account = account;
+    window.contractObject = contractObject;
+    window.contract = web3.eth.contract(contractInterface);
+    window.ipfsAddress = "http://" + ipfsHost + ':' + ipfsWebPort + "/ipfs";
+
+    //var chars="0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmn
+   //opqrstuvwxyz*&-%/!?*+=()";
+
+   /*var generateKey = function generateKey(keyLength){
+  var randomstring = '';
+
+  for (var i=0; i < keyLength; i++) {
+    var rnum = Math.floor(Math.random() * chars.length);
+    randomstring += chars.substring(rnum,rnum+1);
+  }
+  return randomstring;
+};*/
+
+    function deployStorage() {
+        window.IPFSHash = null;
+        window.currentData = null;
+
+        if (window.contractInstance) {
+            console.error('Contract already been deployed at: ', window.contractAddress);
+            return;
+        }
+
+        window.contract.new(window.contractObject, function (err, contract) {
+            if (err) {
+                console.error("Contract deployment error: ", err);
+            } else if (contract.address) {
+                window.contractAddress = contract.address;
+                window.contractInstance = window.contract.at(contract.address);
+                console.log("Contract successfully deployed at: ", contract.address);
+            } else if (contract.transactionHash) {
+                console.log("Awaiting contract deployment with transaction hash: ", contract.transactionHash);
+            } else {
+                console.error("Unresolved contract deployment error");
+            }
+        });
+    }
+
+    function storeContent(path) {
+      //Add method to encrypt input file path before storing
+      //on IPFS
+
+        //var dataAsString = JSON.stringify(path);
+        /*function fixture (path) {
+          return loadFixture(path, 'interface-ipfs-core')
+        }
+
+        const file = {
+          data: fixture(path)
+        }*/
+
+        //var encrypted = CryptoJS.AES.encrypt(path, "alice");
+
+        window.ipfs.add(path, function(err, result) {
+            if (err) {
+                console.error("Content submission error:", err);
+                return false;
+            } else if (result && result[0] && result[0].Hash) {
+                console.log("Content successfully stored. IPFS address:", result[0].Hash);
+            } else {
+                console.error("Unresolved content submission error");
+                return null;
+            }
+        });
+    }
+
+    function storeAddress(data) {
+        if (!window.contractInstance) {
+            console.error('Ensure the storage contract has been deployed');
+            return;
+        }
+
+        if (window.currentData == data) {
+            console.error("Overriding existing data with same data");
+            return;
+        }
+
+        window.contractInstance.sethash.sendTransaction(data, window.sendDataObject, function (err, result) {
+            if (err) {
+                console.error("Transaction submission error:", err);
+            } else {
+                window.currentData = data;
+                console.log("Address successfully stored. Transaction hash:", result);
+            }
+        });
+    }
+
+    function getHash() {
+        if (!window.contractInstance) {
+            console.error("Storage contract has not been deployed");
+            return;
+        }
+
+        window.contractInstance.getHash.call(function (err, result) {
+            if (err) {
+                console.error("Content fetch error:", err);
+            } else if (result && window.IPFSHash == result) {
+                console.log("New data is not mined yet. Current data: ", result);
+                return;
+            } /*else if (result == "X") {
+                console.error('You are not authorised to view this data.');
+                return;
+             }*/ else if (result) {
+                window.IPFSHash = result;
+                var URL = window.ipfsAddress + "/" + result;
+                console.log("Content successfully retrieved. IPFS address", result);
+                console.log("Content URL:", URL);
+            } else {
+                console.error('No data, verify the transaction has been mined');
+            }
+        });
+    }
+
+    function grantOwner (addr) {
+      if (!window.contractInstance) {
+          console.error("Storage contract has not been deployed");
+          return;
+      }
+
+      window.contractInstance.grantOwnership.sendTransaction(addr, window.sendDataObject, function(err, result) {
+        if (err) {
+          console.error("Transaction submission error:", err);
+        }
+        else {
+          console.log("Successfully granted new ownership. Transaction hash:", result);
+        }
+      });
+    }
+
+    function grantRead (addr) {
+      if (!window.contractInstance) {
+          console.error("Storage contract has not been deployed");
+          return;
+      }
+
+      window.contractInstance.grantRead.sendTransaction(addr, window.sendDataObject, function(err, result) {
+        if (err) {
+          console.error("Transaction submission error:", err);
+        }
+        else {
+          console.log("Added read permission for address ", addr);
+          console.log("Transaction hash:", result);
+        }
+      });
+    }
+
+    function hasRead (addr) {
+      if (!window.contractInstance) {
+          console.error("Storage contract has not been deployed");
+          return;
+      }
+
+      window.contractInstance.hasRead.call(addr, function(err, result){
+        if (err) {
+          console.error("Transaction submission error:", err);
+        }
+        else if (result == result) {
+          console.log("Address:", addr, "has read permission:", result);
+        }
+        else {
+          console.error('No data, verify the transaction has been mined');
+        }
+      }
+    );
+    }
+
+    function revokeRead (addr) {
+      if (!window.contractInstance) {
+          console.error("Storage contract has not been deployed");
+          return;
+      }
+
+      window.contractInstance.revokeRead.sendTransaction(addr, window.sendDataObject, function(err, result) {
+        if (err) {
+          console.error("Transaction submission error:", err);
+        }
+        else {
+          console.log("Revoked read permission for address:", addr);
+          console.log("Transaction hash:", result);
+        }
+      });
+    }
+
+    function isOwner () {
+      if (!window.contractInstance) {
+          console.error("Storage contract has not been deployed");
+          return;
+      }
+
+      window.contractInstance.isOwner.call(function(err, result) {
+        if (err) {
+          console.error("Transaction submission error:", err);
+        }
+        else if (result) {
+          console.log("Address:", result, "is owner");
+        }
+        else {
+          console.error('No data, verify the transaction has been mined');
+        }
+      });
+    }
+
+    function getBalance() {
+        window.web3.eth.getBalance(window.account, function (err, balance) {
+            console.log(parseFloat(window.web3.fromWei(balance, "ether")));
+        });
+    }
+
+    </script>
+</head>
+
+<body>
+    <br/>
+    <h2>IPFS and Ethereum Storage Web Example</h2>
+
+    <hr/>
+    <br/>
+
+    <p>Start by opening the developer console to interact with the application. Verify that the console shows we are connected to our IPFS and geth clients. The following steps will guide you through setting up and operating our data storage solution using IPFS and Ethereum.</p>
+
+    <ol>
+        <li><code>deployStorage()</code>: Deploy the storage contract to your Ethereum blockchain. The geth client will show it received the deployment transaction, return a transaction hash to the console, and print out the contract transaction address after successful deployment.</li>
+        <br/>
+        <li><code>storeContent(URL)</code>: Store the specified URL content to IPFS. The IPFS client will receive the URL content for storage and return an IPFS address that will be provided to the smart contract.</li>
+        <br/>
+        <li><code>storeAddress(IPFS address)</code>: Submit a transaction to the Ethereum contract for storage on our blockchain.</li>
+        <br/>
+        <li><code>fetchContent()</code>: Gets the last stored IPFS address in the Ethereum contract and queries IPFS for the associated URL.</li>
+    </ol>
+
+    <br/>
+    <hr/>
+    <br/>
+
+    <p>Here is a concrete example. Let's say we want to upload an image of the <a href="https://ethereum.org/images/wallpaper-homestead.jpg">Ethereum Homestead wallpaper</a>. For example purposes, my IPFS hash address for this wallpaper resolves to "QmPJLNMiAp3QoCKdGAgzshNRbQiZ8wQmyjYkcUHJZzQ19u". Then we have all the pieces to run the storage application.</p>
+
+    <p>Run the commands:</p>
+    <ol>
+        <li><code>deployStorage()</code></li>
+        <li><code>storeContent("https://ethereum.org/images/wallpaper-homestead.jpg")</code></li>
+        <li><code>storeAddress("QmPJLNMiAp3QoCKdGAgzshNRbQiZ8wQmyjYkcUHJZzQ19u")</code></li>
+        <li><code>getHash()</code></li>
+    </ol>
+
+    <p>This process will then return: "http://localhost:8080/ipfs/QmPJLNMiAp3QoCKdGAgzshNRbQiZ8wQmyjYkcUHJZzQ19u"</p>
+
+    <br/>
+    <hr/>
+    <br/>
+
+    <p>Troubleshooting: To verify there is a positive ether balance, run <code>getBalance()</code> to check the Ethereum wallet balance.</p>
+
+    <br/>
+    <hr/>
+</body>
