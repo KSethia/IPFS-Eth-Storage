@@ -491,6 +491,28 @@
     <hr/>
     <br/>
 
+    <p>Additional commands include:</p>
+    <ol>
+        <li><code>grantOwner(addr[])</code></li>
+        <li><code>grantRead(addr[])</code></li>
+        <li><code>revokeRead(addr[])</code></li>
+        <li><code>hasRead(addr[])</code></li>
+        <li><code>isOwner()</code></li>
+    </ol>
+
+    <p>For example, say you want to grant read access to an address on the ethereum network.</p>
+
+    <ol>
+        <li><code>hasRead(addr[0])</code></li>
+        <li><code>hasRead(addr[1])</code></li>
+        <li><code>grantRead(addr[1])</code></li>
+        <li><code>hasRead(addr[1])</code></li>
+    </ol>
+
+    <br/>
+    <hr/>
+    <br/>
+
     <p>Troubleshooting: To verify there is a positive ether balance, run <code>getBalance()</code> to check the Ethereum wallet balance.</p>
 
     <br/>
